@@ -21,7 +21,9 @@ http
       const user = payload.messages.map((m) => (typeof m.content === 'string' ? m.content : '')).join('\n');
       let content;
 
-      if (sys.includes('check quiz questions against a source excerpt')) {
+      if (sys.includes('with no other material')) {
+        content = JSON.stringify({ missing_context: false, what_is_missing: 'none', reason: 'self-contained' });
+      } else if (sys.includes('check quiz questions against a source excerpt')) {
         content = JSON.stringify({
           your_answer: '1',
           matches_marked_answer: true,

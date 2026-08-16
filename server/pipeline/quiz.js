@@ -22,6 +22,7 @@ Absolute rules:
 - Never write "all of the above", "none of the above", or questions about the document itself ("what does the slide say").
 - The question must be ANSWERABLE BY ITSELF. A learner sees only the question and the options, never the excerpt. Never write "the expression shown", "this equation", "the example above", "in the video", "the speaker", "as mentioned" — if the question depends on something the learner cannot see, do not write it.
 - Include any numbers, terms or expressions the question needs INSIDE the question text.
+- If a question is about a worked example — a ball, a price, a triangle, an equation — write the whole setup into the question. "What is the height of the ball after 2 seconds?" is unanswerable; "A ball follows h = 80 - 16t^2. What is h at t = 2?" is answerable.
 - Much of this material is transcribed speech, where the worked examples were written on a board and are missing from the text. Only write a question when the excerpt states a complete, self-contained fact. If it does not, write about a different fact instead. Fewer good questions is the correct outcome.
 - Exactly one option may be correct, and the other three must be clearly wrong.
 - Output strict JSON only.`;

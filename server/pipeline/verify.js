@@ -57,6 +57,9 @@ export function snippetGrounded(snippet, text) {
  */
 const DANGLING = [
   /\bshown\b/i, /\bthe (video|speaker|instructor|author|lecture|transcript|slide|diagram|image|figure|table)\b/i,
+  /\baccording to the\b/i,
+  /\bthe (evaluation|calculation|derivation|worked|demonstration|walkthrough|exercise|scenario|setup)\b/i,
+  /\bin the (example|problem|question|exercise|evaluation|calculation)\b/i,
   /\bthis (equation|expression|example|problem|number|value|function|figure|diagram|graph|step)\b/i,
   /\b(above|below|earlier|previously) (mentioned|shown|described|discussed|given)\b/i,
   /\bas (mentioned|shown|described|discussed|stated) (above|below|earlier|in)\b/i,
@@ -180,10 +183,59 @@ JSON: { "your_answer": "the option number you would choose, or none", "matches_m
     verdict.matches_marked_answer === true &&
     verdict.self_contained === true;
 
+  if (!ok) {
+    return {
+      ok: false,
+      stage: 'model',
+      reasons: [String(verdict.reason || 'the checker could not confirm this question')],
+      verdict,
+    };
+  }
+
+  // Self-containment cannot be judged by anyone holding the source. A checker
+  // that has read the excerpt already knows there was a ball, a price, a
+  // triangle, so "what is the height after 2 seconds?" looks answerable to it.
+  // This pass sees ONLY what the learner sees.
+  const blind = await chatJson({
+    role: 'verify',
+    stage: 'quiz:standalone',
+    temperature: 0,
+    maxTokens: 200,
+    messages: [
+      {
+        role: 'system',
+        content: `You are shown a quiz question and its options, with no other material. Decide whether the question can be answered as written.
+
+Say missing_context is true if the question refers to something it never provides: a specific example, object, scenario, formula, number, price, measurement or result that is not stated in the question itself. Phrases like "the ball", "the evaluation", "the expression", "the final value" are the usual signs, when nothing earlier defines them.
+
+A question is FINE if it asks about a general rule or definition, or if every number and formula it needs is written in the question. Solving for an unknown is the normal job of a question — if the formula and the inputs are given, asking for the result is not missing context. Only flag things the question never provides at all. JSON only.`,
+      },
+      {
+        role: 'user',
+        content: `QUESTION: ${q.prompt}
+OPTIONS:
+${optionsBlock}
+
+JSON: { "missing_context": true|false, "what_is_missing": "the undefined thing, or none", "reason": "one short sentence" }`,
+      },
+    ],
+  });
+
+  if (blind.missing_context === true) {
+    return {
+      ok: false,
+      stage: 'standalone',
+      reasons: [
+        `the question does not give the learner what it asks about${blind.what_is_missing && blind.what_is_missing !== 'none' ? ` (${blind.what_is_missing})` : ''}`,
+      ],
+      verdict: { ...verdict, blind },
+    };
+  }
+
   return {
-    ok,
+    ok: true,
     stage: 'model',
-    reasons: ok ? [] : [String(verdict.reason || 'the checker could not confirm this question')],
-    verdict,
+    reasons: [],
+    verdict: { ...verdict, blind },
   };
 }
