@@ -21,17 +21,14 @@ http
       const user = payload.messages.map((m) => (typeof m.content === 'string' ? m.content : '')).join('\n');
       let content;
 
-      if (sys.includes('another checker approved')) {
-        // the adversarial second pass
+      if (sys.includes('check quiz questions against a source excerpt')) {
         content = JSON.stringify({
-          your_answer: 'option 1',
+          your_answer: '1',
           matches_marked_answer: true,
-          answerable_without_the_excerpt: true,
-          broken: false,
-          reason: 'answerable on its own',
+          supported_by_excerpt: true,
+          self_contained: true,
+          reason: 'stated verbatim',
         });
-      } else if (sys.includes('strict grounding verifier')) {
-        content = JSON.stringify({ supported: true, answer_is_correct: true, snippet_supports_answer: true, self_contained: true, reason: 'stated verbatim' });
       } else if (sys.includes('judge whether a set of source excerpts')) {
         content = JSON.stringify({ verdict: 'sufficient', missing: '', suggestion: '' });
       } else if (sys.includes('grade a short free-text answer')) {

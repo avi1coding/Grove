@@ -87,6 +87,16 @@ export async function chat({
 
       if (!res.ok) {
         const text = await res.text().catch(() => '');
+
+        // Some models cannot satisfy the provider's JSON mode and fail the
+        // whole request. They can still produce JSON in the body, so drop the
+        // constraint and let extractJson pull it out.
+        if (res.status === 400 && /json_validate_failed|response_format/i.test(text) && body.response_format) {
+          record({ stage, role, model, ms: Date.now() - started, ok: false, status: 400, retryingWithoutJsonMode: true });
+          delete body.response_format;
+          continue;
+        }
+
         // 4xx other than rate limiting is not worth retrying.
         if (res.status !== 429 && res.status < 500) {
           record({ stage, role, model, ms: Date.now() - started, ok: false, status: res.status });
