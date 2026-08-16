@@ -91,7 +91,7 @@ docker build -t grove . && docker run -p 3000:3000 --env-file .env grove
 
 `render.yaml` is a one-click Render blueprint (set `LLM_API_KEY` in the dashboard, never in the repo); `Procfile` covers Railway and similar. Sessions are JSON on disk under `data/` — mount a volume if you want them to survive a redeploy.
 
-Public deployments are rate limited: 120 requests/min per IP overall, 40 per 10 min on model-backed routes, and at most 4 concurrent LLM requests process-wide, because those routes spend real API credits.
+Public deployments are rate limited: 120 requests/min per IP overall, 100 per 10 min on model-backed routes, and at most 4 concurrent LLM requests process-wide, because those routes spend real API credits.
 
 ## Security
 

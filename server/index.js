@@ -59,7 +59,7 @@ const spendy = [
   '/api/session/:id/boss/quiz',
   '/api/session/:id/sources',
 ];
-app.post(spendy, rateLimit({ name: 'llm', windowMs: 10 * 60_000, max: 40 }), concurrencyLimit(4));
+app.post(spendy, rateLimit({ name: 'llm', windowMs: 10 * 60_000, max: 100 }), concurrencyLimit(4));
 
 const upload = multer({
   dest: UPLOAD_DIR,
