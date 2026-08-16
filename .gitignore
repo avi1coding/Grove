@@ -1,0 +1,8 @@
+node_modules/
+data/
+.env
+*.log
+.DS_Store
+
+# tesseract.js OCR language data (downloaded on first use)
+*.traineddata
