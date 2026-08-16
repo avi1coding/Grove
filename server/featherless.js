@@ -28,6 +28,7 @@ export class FeatherlessError extends Error {
 
 function modelFor(role) {
   if (role === 'small') return config.featherless.smallModel;
+  if (role === 'verify') return config.featherless.verifyModel;
   if (role === 'vision') return config.featherless.visionModel || config.featherless.bigModel;
   return config.featherless.bigModel;
 }
@@ -93,7 +94,13 @@ export async function chat({
         }
         lastErr = new FeatherlessError(`Featherless ${res.status}: ${text.slice(0, 200)}`, res.status);
         record({ stage, role, model, ms: Date.now() - started, ok: false, status: res.status, retrying: true });
-        await sleep(700 * attempt * attempt);
+        // Rate limit responses say exactly how long to wait; guessing wastes
+        // the attempt and burns the budget again.
+        const retryAfter = Number(res.headers.get('retry-after'));
+        const wait = Number.isFinite(retryAfter) && retryAfter > 0
+          ? Math.min(retryAfter * 1000 + 250, 30_000)
+          : 700 * attempt * attempt;
+        await sleep(wait);
         continue;
       }
 

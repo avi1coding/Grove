@@ -105,6 +105,8 @@ ok('boss schedules spaced review', Boolean(br.boss.srs?.dueAt));
 
 const calls = await j('/api/calls');
 const roles = calls.calls.reduce((a, c) => ((a[c.role] = (a[c.role] || 0) + 1), a), {});
-ok('routed across both models', roles.big > 0 && roles.small > 0, JSON.stringify(roles));
+ok('routed across separate models', roles.big > 0 && roles.verify > 0, JSON.stringify(roles));
+ok('checking runs on its own model, not the authoring one', roles.verify > roles.big,
+   `${roles.verify} checks vs ${roles.big} authoring calls`);
 const stages = [...new Set(calls.calls.map((c) => c.stage))];
 ok('verification stage ran', stages.includes('quiz:verify'), stages.join(', '));

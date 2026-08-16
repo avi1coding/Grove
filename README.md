@@ -29,7 +29,7 @@ flowchart TB
 
 Most study tools give you a long list of cards or questions with no shape, so you never know how much is left. Grove gives the material a structure taken from your own sources, and a clear finish line.
 
-The two-level limit is deliberate. Left alone, a topic can be broken down forever, and you end up with hundreds of items and no sense of progress. Two levels keeps a large course to a map you can see in one screen.
+The reason there are only two levels to the subtopics is simple. By itself, a topic can be broken down forever, and you end up with hundreds of items and no sense of progress. Two levels keeps a large course to a map you can see in one screen.
 
 Subtopics your material barely covers are marked, and Grove tells you what to add. That way the map reflects what you can actually learn from what you have, instead of quizzing you on gaps.
 

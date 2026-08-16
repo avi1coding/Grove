@@ -32,10 +32,14 @@ export const config = {
     bigModel: pick('LLM_BIG_MODEL', 'FEATHERLESS_BIG_MODEL') || 'moonshotai/Kimi-K2-Instruct',
     // Small fast model: grounding verification, short-answer grading, hints.
     smallModel: pick('LLM_SMALL_MODEL', 'FEATHERLESS_SMALL_MODEL') || 'meta-llama/Meta-Llama-3.1-8B-Instruct',
+    // Verification runs on its own model. Providers meter each model
+    // separately, so keeping the checker off the authoring model roughly
+    // doubles the throughput before rate limits bite.
+    verifyModel: pick('LLM_VERIFY_MODEL') || pick('LLM_SMALL_MODEL', 'FEATHERLESS_SMALL_MODEL') || 'meta-llama/Meta-Llama-3.1-8B-Instruct',
     // Optional vision model for reading text off images when tesseract.js is unavailable.
     visionModel: pick('LLM_VISION_MODEL', 'FEATHERLESS_VISION_MODEL'),
     timeoutMs: Number(pick('LLM_TIMEOUT_MS', 'FEATHERLESS_TIMEOUT_MS') || 300_000),
-    maxRetries: Number(pick('LLM_MAX_RETRIES', 'FEATHERLESS_MAX_RETRIES') || 3),
+    maxRetries: Number(pick('LLM_MAX_RETRIES', 'FEATHERLESS_MAX_RETRIES') || 4),
   },
 
   transcribe: {

@@ -20,6 +20,10 @@ Absolute rules:
 - The correct answer must be explicitly stated or directly entailed by the cited snippet.
 - The three wrong options must be clearly wrong according to the excerpt — plausible, but refutable from the text.
 - Never write "all of the above", "none of the above", or questions about the document itself ("what does the slide say").
+- The question must be ANSWERABLE BY ITSELF. A learner sees only the question and the options, never the excerpt. Never write "the expression shown", "this equation", "the example above", "in the video", "the speaker", "as mentioned" — if the question depends on something the learner cannot see, do not write it.
+- Include any numbers, terms or expressions the question needs INSIDE the question text.
+- Much of this material is transcribed speech, where the worked examples were written on a board and are missing from the text. Only write a question when the excerpt states a complete, self-contained fact. If it does not, write about a different fact instead. Fewer good questions is the correct outcome.
+- Exactly one option may be correct, and the other three must be clearly wrong.
 - Output strict JSON only.`;
 
 function difficultyWord(d) {
@@ -121,8 +125,9 @@ async function generateVerified(opts) {
     const need = count - accepted.length;
     const batch = await authorQuestions({
       ...opts,
-      // Over-author a little so one rejection doesn't cost a whole round.
-      count: Math.min(need + (rounds === 1 ? 1 : 2), 10),
+      // Over-author enough to absorb rejections, but not so much that
+      // verifying the batch blows through the provider's per-minute budget.
+      count: Math.min(need + 2, 8),
       avoid: [...(opts.avoid || []), ...accepted.map((q) => q.prompt)],
       rejected: rejections.slice(-6).map((r) => r.reasons.join('; ')),
     });
@@ -134,16 +139,27 @@ async function generateVerified(opts) {
       return true;
     });
 
-    const verdicts = await Promise.all(
-      fresh.map(async (q) => {
-        try {
-          return { q, v: await verifyQuestion(q, chunkMap) };
-        } catch (err) {
-          // Distinguish "the model says unsupported" from "the model was unreachable".
-          return { q, v: { ok: false, stage: 'error', transport: true, reasons: [String(err.message || err)] } };
-        }
-      }),
-    );
+    // Verify a few at a time. Firing every question at once spikes past the
+    // provider's tokens-per-minute limit, and those rejections are not quality
+    // signals — they are just dropped work.
+    const verdicts = [];
+    const LANES = 3;
+    for (let i = 0; i < fresh.length; i += LANES) {
+      const slice = fresh.slice(i, i + LANES);
+      const batch = await Promise.all(
+        slice.map(async (q) => {
+          try {
+            return { q, v: await verifyQuestion(q, chunkMap) };
+          } catch (err) {
+            // Distinguish "the model says unsupported" from "the model was unreachable".
+            return { q, v: { ok: false, stage: 'error', transport: true, reasons: [String(err.message || err)] } };
+          }
+        }),
+      );
+      verdicts.push(...batch);
+      // Stop early once we have what we need instead of verifying the rest.
+      if (verdicts.filter((x) => x.v.ok).length + accepted.length >= count) break;
+    }
 
     for (const { q, v } of verdicts) {
       if (accepted.length >= count) break;
