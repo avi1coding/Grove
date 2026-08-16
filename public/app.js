@@ -155,6 +155,54 @@ async function boot() {
   render();
 }
 
+/* ---- dialogs -------------------------------------------------------------
+ * Native prompt()/confirm() are unstyled, block the page, and look nothing
+ * like the rest of the app. These are the same thing in Grove's own shell, on
+ * a layer above the modal so a quiz can ask before it is abandoned.
+ * ------------------------------------------------------------------------ */
+function dialog({ title, message, value, placeholder, confirmLabel = 'OK', cancelLabel = 'Cancel', danger = false, input = false }) {
+  return new Promise((resolve) => {
+    const host = $('#dialog');
+    const card = $('#dialog-card');
+    card.innerHTML = '';
+
+    let field;
+    const done = (result) => {
+      setHidden(host, true);
+      document.removeEventListener('keydown', onKey);
+      resolve(result);
+    };
+    const onKey = (e) => {
+      if (e.key === 'Escape') done(input ? null : false);
+      if (e.key === 'Enter' && input) { e.preventDefault(); done(field.value.trim()); }
+    };
+
+    card.append(el('h2', {}, title));
+    if (message) card.append(el('p', { class: 'muted' }, message));
+    if (input) {
+      field = el('input', { type: 'text', placeholder: placeholder || '' });
+      field.value = value || '';
+      card.append(field);
+    }
+    card.append(
+      el('div', { class: 'dialog-actions' },
+        el('button', { class: 'btn', onclick: () => done(input ? null : false) }, cancelLabel),
+        el('button', {
+          class: `btn ${danger ? 'danger-solid' : 'primary'}`,
+          onclick: () => done(input ? field.value.trim() : true),
+        }, confirmLabel),
+      ),
+    );
+
+    setHidden(host, false);
+    document.addEventListener('keydown', onKey);
+    if (field) { field.focus(); field.select(); }
+  });
+}
+
+const askText = (title, opts = {}) => dialog({ title, input: true, confirmLabel: 'Save', ...opts });
+const askConfirm = (title, opts = {}) => dialog({ title, ...opts });
+
 /* ---- spaces -------------------------------------------------------------
  * Several topics at once. Each space is its own session on the server; the
  * browser keeps the list, because a session id is the only credential and a
@@ -236,7 +284,7 @@ function openSpaces() {
       el('button', {
         class: 'space-act', title: 'Rename',
         onclick: async () => {
-          const name = prompt('Name this space', spaceLabel(sp));
+          const name = await askText('Rename space', { value: spaceLabel(sp), placeholder: 'Space name' });
           if (name == null) return;
           try {
             await api(`/api/session/${sp.id}/name`, { method: 'POST', body: { name } });
@@ -249,7 +297,11 @@ function openSpaces() {
       el('button', {
         class: 'space-act danger', title: 'Delete',
         onclick: async () => {
-          if (!confirm(`Delete "${spaceLabel(sp)}" and everything in it?`)) return;
+          const yes = await askConfirm(`Delete "${spaceLabel(sp)}"?`, {
+            message: 'Its material, map and progress go with it. This cannot be undone.',
+            confirmLabel: 'Delete', danger: true,
+          });
+          if (!yes) return;
           try {
             await api(`/api/session/${sp.id}`, { method: 'DELETE' });
           } catch { /* already gone server-side is fine */ }
@@ -270,7 +322,13 @@ function openSpaces() {
       el('h2', { style: 'flex:1' }, 'Spaces'),
       el('button', { class: 'close', style: 'position:static', onclick: closeModal }, '\u00d7')),
     rows.length ? el('div', { class: 'space-list' }, rows) : el('p', { class: 'hint' }, 'No spaces yet.'),
-    el('button', { class: 'btn primary block', onclick: () => newSpace(prompt('Name the new space', '') || '') }, 'New space'),
+    el('button', {
+      class: 'btn primary block',
+      onclick: async () => {
+        const name = await askText('New space', { placeholder: 'e.g. Organic Chemistry', confirmLabel: 'Create' });
+        if (name != null) newSpace(name);
+      },
+    }, 'New space'),
   ));
 }
 
@@ -921,7 +979,16 @@ function renderQuestion() {
   const head = el('div', { class: 'quiz-head' },
     el('h2', {}, title),
     dots,
-    el('button', { class: 'close', onclick: () => { if (confirm('Abandon this quiz? It will not count.')) closeModal(); } }, '\u00d7'),
+    el('button', {
+      class: 'close',
+      onclick: async () => {
+        const yes = await askConfirm('Leave this quiz?', {
+          message: 'Your answers so far will not count.',
+          confirmLabel: 'Leave', danger: true,
+        });
+        if (yes) closeModal();
+      },
+    }, '\u00d7'),
   );
 
   const meta = el('div', { class: 'q-foot' },
@@ -973,7 +1040,13 @@ function renderQuestion() {
 async function submitQuiz() {
   const quiz = S.quiz;
   const unanswered = quiz.questions.filter((q) => S.answers[q.id] == null || S.answers[q.id] === '');
-  if (unanswered.length && !confirm(`${unanswered.length} unanswered — submit anyway?`)) return;
+  if (unanswered.length) {
+    const yes = await askConfirm(`${unanswered.length} unanswered`, {
+      message: 'Blank answers are marked wrong. Submit anyway?',
+      confirmLabel: 'Submit',
+    });
+    if (!yes) return;
+  }
   try {
     const res = await api(`/api/session/${S.sessionId}/quiz/${quiz.id}/submit`, {
       method: 'POST', body: { answers: S.answers }, label: 'Grading…',

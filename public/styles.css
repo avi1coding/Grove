@@ -874,3 +874,29 @@ textarea:focus, input:focus {
 }
 .space-act:hover { background: var(--bg-3); color: var(--ink); }
 .space-act.danger:hover { background: var(--red-bg); color: var(--red); }
+
+/* ── dialogs (replacing native prompt/confirm) ──────────────────────────── */
+.dialog-layer {
+  position: fixed; inset: 0; z-index: 100;          /* above the quiz modal */
+  background: rgba(20, 34, 26, .34);
+  display: flex; align-items: center; justify-content: center; padding: 24px;
+  animation: fade .18s var(--ease);
+}
+.dialog-card {
+  background: var(--bg-2); border: 2px solid var(--line); border-radius: 20px;
+  width: min(400px, 100%); padding: 24px;
+  display: flex; flex-direction: column; gap: 12px;
+  box-shadow: var(--shadow-lg);
+  animation: pop .28s var(--spring);
+}
+.dialog-card h2 { font-size: 18px; }
+.dialog-card p { font-size: 13.5px; line-height: 1.5; }
+.dialog-card input { margin-top: 2px; }
+.dialog-actions { display: flex; gap: 9px; margin-top: 4px; }
+.dialog-actions .btn { flex: 1; justify-content: center; text-align: center; }
+.btn.danger-solid {
+  background: var(--red); border-color: var(--red); color: #fff;
+  box-shadow: 0 4px 0 #8f3f3d;
+}
+.btn.danger-solid:hover:not(:disabled) { background: #c25e5b; border-color: #c25e5b; }
+.btn.danger-solid:active:not(:disabled) { transform: translateY(4px); box-shadow: 0 0 0 #8f3f3d; }
