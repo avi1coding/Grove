@@ -93,7 +93,7 @@ function toast(msg, isError = false) {
   toastTimer = setTimeout(() => setHidden(t, true), isError ? 8000 : 3500);
 }
 
-async function api(path, { method = 'GET', body, form, label } = {}) {
+async function api(path, { method = 'GET', body, form, label, _retried } = {}) {
   if (label) busy(label);
   try {
     const res = await fetch(path, {
@@ -102,6 +102,26 @@ async function api(path, { method = 'GET', body, form, label } = {}) {
       body: form || (body ? JSON.stringify(body) : undefined),
     });
     const data = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+
+    // The session this tab remembers can disappear underneath it — the server
+    // restarted onto different storage, or the data directory was cleared. The
+    // page only self-heals at boot, so without this every later request is a
+    // dead end reading "Session not found". Start a fresh one and retry once.
+    if (res.status === 404 && /session not found/i.test(data.error || '') && !_retried) {
+      const stale = S.sessionId;
+      const fresh = await fetch('/api/session', { method: 'POST' }).then((r) => r.json());
+      S.sessionId = fresh.id;
+      S.data = fresh;
+      localStorage.setItem('grove.session', fresh.id);
+      toast('That session had expired — started a fresh one.', true);
+      if (stale && path.includes(stale)) {
+        return api(path.replace(stale, fresh.id), { method, body, form, label, _retried: true });
+      }
+      render();
+      showScreen('import');
+      throw Object.assign(new Error('Session expired — please try that again.'), { status: 404 });
+    }
+
     if (!res.ok) throw Object.assign(new Error(data.error || `HTTP ${res.status}`), { status: res.status });
     return data;
   } finally {
