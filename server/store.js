@@ -17,10 +17,11 @@ const filePath = (id) => path.join(SESSION_DIR, `${id}.json`);
 // Serialise writes per session so concurrent requests can't clobber each other.
 const locks = new Map();
 
-export function createSession() {
+export function createSession(name = '') {
   const id = newId('s_');
   return {
     id,
+    name: String(name || '').slice(0, 80),
     createdAt: new Date().toISOString(),
     sources: [],
     chunks: [],
@@ -36,6 +37,7 @@ export function createSession() {
 
 export async function saveSession(session) {
   await ensureDirs();
+  session.updatedAt = new Date().toISOString();
   const tmp = `${filePath(session.id)}.tmp`;
   await fs.writeFile(tmp, JSON.stringify(session));
   await fs.rename(tmp, filePath(session.id));
@@ -81,7 +83,9 @@ export function logEvent(session, type, detail = {}) {
 export function publicView(session) {
   return {
     id: session.id,
+    name: session.name || '',
     createdAt: session.createdAt,
+    updatedAt: session.updatedAt || session.createdAt,
     sources: session.sources.map((s) => ({
       id: s.id,
       kind: s.kind,
@@ -110,4 +114,11 @@ export function publicView(session) {
       : null,
     events: session.events.slice(-40),
   };
+}
+
+/** Remove a space and its stored work. */
+export async function deleteSession(id) {
+  if (!/^s_[a-f0-9]{12}$/.test(id)) throw Object.assign(new Error('Bad session id'), { status: 400 });
+  await fs.rm(filePath(id), { force: true });
+  locks.delete(id);
 }

@@ -149,10 +149,133 @@ async function boot() {
     S.data = s;
     localStorage.setItem('grove.session', s.id);
   }
+  rememberSpace(S.data);
   renderCatalogue();
   showScreen(S.data?.tree ? 'tree' : 'import');
   render();
 }
+
+/* ---- spaces -------------------------------------------------------------
+ * Several topics at once. Each space is its own session on the server; the
+ * browser keeps the list, because a session id is the only credential and a
+ * server-side listing would hand every space to every visitor.
+ * ------------------------------------------------------------------------ */
+const SPACES_KEY = 'grove.spaces';
+
+const loadSpaces = () => {
+  try {
+    return JSON.parse(localStorage.getItem(SPACES_KEY)) || [];
+  } catch {
+    return [];
+  }
+};
+const saveSpaces = (list) => localStorage.setItem(SPACES_KEY, JSON.stringify(list.slice(0, 40)));
+
+/** Keep the registry in step with whatever the server just told us. */
+function rememberSpace(data) {
+  if (!data?.id) return;
+  const list = loadSpaces().filter((s) => s.id !== data.id);
+  list.unshift({
+    id: data.id,
+    name: data.name || data.tree?.nodes?.root?.title || '',
+    topic: data.tree?.nodes?.root?.title || '',
+    chunks: data.chunkCount || 0,
+    at: Date.now(),
+  });
+  saveSpaces(list);
+  renderSpaceName();
+}
+
+const spaceLabel = (s) => s.name || s.topic || 'Untitled space';
+
+function renderSpaceName() {
+  const here = loadSpaces().find((s) => s.id === S.sessionId);
+  const label = here ? spaceLabel(here) : 'New space';
+  for (const id of ['#space-name-import', '#space-name-tree']) {
+    const node = $(id);
+    if (node) node.textContent = label;
+  }
+}
+
+async function switchSpace(id) {
+  try {
+    const data = await api(`/api/session/${id}`, { label: 'Opening…' });
+    S.sessionId = id;
+    S.data = data;
+    localStorage.setItem('grove.session', id);
+    rememberSpace(data);
+    closeModal();
+    showScreen(data.tree ? 'tree' : 'import');
+    render();
+  } catch (err) {
+    toast(err.message, true);
+  }
+}
+
+async function newSpace(name) {
+  const data = await api('/api/session', { method: 'POST', body: { name: name || '' }, label: 'Creating…' });
+  S.sessionId = data.id;
+  S.data = data;
+  localStorage.setItem('grove.session', data.id);
+  rememberSpace(data);
+  closeModal();
+  showScreen('import');
+  setTab('upload');
+  render();
+}
+
+function openSpaces() {
+  const list = loadSpaces();
+  const rows = list.map((sp) => {
+    const active = sp.id === S.sessionId;
+    return el('div', { class: `space-row${active ? ' active' : ''}` },
+      el('button', { class: 'space-open', onclick: () => (active ? closeModal() : switchSpace(sp.id)) },
+        el('span', { class: 'space-title' }, spaceLabel(sp)),
+        el('span', { class: 'space-meta' }, sp.chunks ? `${sp.chunks} chunks` : 'empty'),
+      ),
+      el('button', {
+        class: 'space-act', title: 'Rename',
+        onclick: async () => {
+          const name = prompt('Name this space', spaceLabel(sp));
+          if (name == null) return;
+          try {
+            await api(`/api/session/${sp.id}/name`, { method: 'POST', body: { name } });
+            saveSpaces(loadSpaces().map((x) => (x.id === sp.id ? { ...x, name } : x)));
+            renderSpaceName();
+            openSpaces();
+          } catch (err) { toast(err.message, true); }
+        },
+      }, 'Rename'),
+      el('button', {
+        class: 'space-act danger', title: 'Delete',
+        onclick: async () => {
+          if (!confirm(`Delete "${spaceLabel(sp)}" and everything in it?`)) return;
+          try {
+            await api(`/api/session/${sp.id}`, { method: 'DELETE' });
+          } catch { /* already gone server-side is fine */ }
+          const rest = loadSpaces().filter((x) => x.id !== sp.id);
+          saveSpaces(rest);
+          if (sp.id === S.sessionId) {
+            if (rest.length) return switchSpace(rest[0].id);
+            return newSpace('');
+          }
+          openSpaces();
+        },
+      }, 'Delete'),
+    );
+  });
+
+  openModal(el('div', { style: 'display:flex;flex-direction:column;gap:14px' },
+    el('div', { class: 'quiz-head' },
+      el('h2', { style: 'flex:1' }, 'Spaces'),
+      el('button', { class: 'close', style: 'position:static', onclick: closeModal }, '\u00d7')),
+    rows.length ? el('div', { class: 'space-list' }, rows) : el('p', { class: 'hint' }, 'No spaces yet.'),
+    el('button', { class: 'btn primary block', onclick: () => newSpace(prompt('Name the new space', '') || '') }, 'New space'),
+  ));
+}
+
+$('#space-switch-import').onclick = openSpaces;
+$('#space-switch-tree').onclick = openSpaces;
 
 /* ---- theme ------------------------------------------------------------- */
 const THEME_KEY = 'grove.theme';
@@ -322,6 +445,7 @@ $('#build').onclick = async () => {
   try {
     const data = await api(`/api/session/${S.sessionId}/build`, { method: 'POST', label: 'Building the tree…' });
     S.data = data;
+    rememberSpace(data);
     showScreen('tree');
     render();
     toast(data.carriedOver ? `${data.tree.nodes.root.title} · kept ${data.carriedOver} finished` : data.tree.nodes.root.title);
@@ -353,6 +477,7 @@ function render() {
   renderSources();
   renderGaps();
   renderSrs();
+  renderSpaceName();
 
   const hasTree = Boolean(S.data?.tree);
   $('#build').disabled = !(S.data?.chunkCount > 0);

@@ -3,7 +3,7 @@ import multer from 'multer';
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import { config, hasFeatherlessKey, ROOT, UPLOAD_DIR } from './config.js';
-import { ensureDirs, createSession, saveSession, loadSession, withSession, publicView, logEvent, newId } from './store.js';
+import { ensureDirs, createSession, saveSession, loadSession, deleteSession, withSession, publicView, logEvent, newId } from './store.js';
 import { ingestFile, ingestUrl } from './ingest.js';
 import { CATALOGUE } from './sources.js';
 import { chunkText } from './chunk.js';
@@ -111,10 +111,26 @@ app.get('/api/catalogue', (_req, res) => res.json({ catalogue: CATALOGUE }));
 
 /* ---------------------------------------------------------- sessions ----- */
 
-app.post('/api/session', wrap(async (_req, res) => {
-  const session = createSession();
+app.post('/api/session', wrap(async (req, res) => {
+  const session = createSession(req.body?.name);
   await saveSession(session);
   res.json(publicView(session));
+}));
+
+/** Rename a space. */
+app.post('/api/session/:id/name', wrap(async (req, res) => {
+  const out = await withSession(req.params.id, async (session) => {
+    session.name = String(req.body?.name || '').slice(0, 80);
+    return publicView(session);
+  });
+  res.json(out);
+}));
+
+/** Delete a space and everything in it. */
+app.delete('/api/session/:id', wrap(async (req, res) => {
+  await loadSession(req.params.id);          // 404s if it isn't there
+  await deleteSession(req.params.id);
+  res.json({ deleted: req.params.id });
 }));
 
 app.get('/api/session/:id', wrap(async (req, res) => {

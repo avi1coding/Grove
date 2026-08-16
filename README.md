@@ -61,6 +61,8 @@ Anything failing either check is thrown out and regenerated. **If a full quiz ca
 
 **Progression.** 5/5 lights a node. Miss any and there's no lockout timer: you review the exact snippets you got wrong, or take an auto-generated micro-lesson on just those concepts, and then the retry unlocks — adaptive, re-weighted toward what you missed, with fresh questions. Light every node and the boss quiz opens: 15–20 questions across the whole tree including cross-source synthesis questions that cite two different uploads. Passing schedules spaced repetition.
 
+**Spaces.** Study several things at once. Each space is an independent session — its own material, tree, and progress — and you switch between them from the header. The list lives in your browser, because a session id is the only credential and a server-side listing would hand every space to every visitor.
+
 **Rebuilding keeps your work.** Add material later and rebuild — the map changes, but subtopics you already finished stay finished. Node ids are meaningless between builds, so progress is matched by title (exact, or ≥60% word overlap for a rewording).
 
 ---
@@ -103,7 +105,9 @@ User-supplied URLs are fetched **server-side**, so every one is checked against 
 
 | | |
 |---|---|
-| `POST /api/session` | new session |
+| `POST /api/session` | new space (optional `name`) |
+| `POST /api/session/:id/name` | rename a space |
+| `DELETE /api/session/:id` | delete a space and its work |
 | `POST /api/session/:id/sources` | multipart `files[]`, `text`, `urls` → parse, chunk, index |
 | `POST /api/session/:id/build` | topic tree + gap detection (keeps finished nodes) |
 | `POST /api/session/:id/node/:nodeId/expand` | split a subtopic (level 2 is the cap) |
