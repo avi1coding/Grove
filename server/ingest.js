@@ -169,6 +169,26 @@ async function fetchPlayer(videoId) {
       /* try the next client */
     }
   }
+  // InnerTube gave us nothing. Some videos still expose captionTracks in the
+  // watch page payload, so try that before giving up.
+  try {
+    const page = await fetchWithTimeout(`https://www.youtube.com/watch?v=${videoId}&hl=en`, {
+      headers: { 'User-Agent': UA, 'Accept-Language': 'en-US,en;q=0.9' },
+    }, 20_000).then((r) => r.text());
+    const m = page.match(/"captionTracks":(\[.*?\])/);
+    if (m) {
+      const tracks = JSON.parse(m[1].replace(/\\u0026/g, '&'));
+      if (tracks.length) {
+        const t = page.match(/"title":\s*"([^"]{1,200})"/);
+        return { tracks, title: t ? decodeEntities(JSON.parse(`"${t[1]}"`)) : `YouTube ${videoId}`, ua: UA };
+      }
+    }
+    if (/"status":"LOGIN_REQUIRED"/.test(page)) lastStatus = 'LOGIN_REQUIRED';
+    else if (/"status":"UNPLAYABLE"/.test(page)) lastStatus = 'UNPLAYABLE';
+  } catch {
+    /* fall through to the empty result */
+  }
+
   return { tracks: [], title: `YouTube ${videoId}`, ua: UA, status: lastStatus };
 }
 
@@ -208,9 +228,12 @@ export async function extractYouTube(url) {
 
   const { tracks, title, ua, status } = await fetchPlayer(id);
   if (!tracks.length) {
-    throw new Error(
-      `No captions available for this video${status ? ` (${status})` : ''} — paste the transcript as text instead.`,
-    );
+    const why = {
+      LOGIN_REQUIRED: 'it is private, members-only, or age-restricted',
+      UNPLAYABLE: 'it is not playable (region-locked or removed)',
+      ERROR: 'the video is unavailable',
+    }[status] || 'captions are turned off for it';
+    throw Object.assign(new Error(`No transcript for "${title}" — ${why}.`), { reason: status || 'NO_CAPTIONS' });
   }
 
   const track =
@@ -282,17 +305,33 @@ export async function extractPlaylist(url, limit = 12) {
   if (!ids.length) throw new Error('No videos found — the playlist may be private.');
 
   const out = [];
-  const failed = [];
+  const reasons = {};
   for (const vid of ids) {
     try {
       const r = await extractYouTube(`https://www.youtube.com/watch?v=${vid}`);
       out.push({ kind: 'youtube', name: r.title, text: r.text, meta: { ...r.meta, playlist: id } });
     } catch (err) {
-      failed.push(`${vid}: ${err.message}`);
+      const key = err.reason || 'FETCH_FAILED';
+      reasons[key] = (reasons[key] || 0) + 1;
     }
   }
-  if (!out.length) throw new Error(`No captioned videos in that playlist (${failed.length} skipped)`);
-  return { items: out, skipped: failed.length };
+
+  if (!out.length) {
+    const label = {
+      NO_CAPTIONS: 'have captions turned off',
+      LOGIN_REQUIRED: 'are private, members-only, or age-restricted',
+      UNPLAYABLE: 'are region-locked or removed',
+      FETCH_FAILED: 'could not be fetched',
+    };
+    const detail = Object.entries(reasons)
+      .map(([k, n]) => `${n} ${label[k] || k}`)
+      .join(', ');
+    throw new Error(
+      `None of the ${ids.length} videos in that playlist have a transcript Grove can read (${detail}). ` +
+        `Open a video, use its transcript panel, and paste the text instead.`,
+    );
+  }
+  return { items: out, skipped: Object.values(reasons).reduce((a, b) => a + b, 0) };
 }
 
 export async function ingestUrl(url) {
