@@ -38,6 +38,16 @@ export const config = {
     maxRetries: Number(pick('LLM_MAX_RETRIES', 'FEATHERLESS_MAX_RETRIES') || 3),
   },
 
+  transcribe: {
+    // Speech-to-text for audio/video and for YouTube videos with no captions.
+    enabled: (process.env.GROVE_TRANSCRIBE ?? '1') !== '0',
+    model: pick('LLM_TRANSCRIBE_MODEL') || 'whisper-large-v3-turbo',
+    timeoutMs: Number(pick('LLM_TRANSCRIBE_TIMEOUT_MS') || 180_000),
+    // Guardrails so one long lecture cannot eat the whole budget.
+    maxMinutes: Number(process.env.GROVE_TRANSCRIBE_MAX_MINUTES || 90),
+    maxPlaylistMinutes: Number(process.env.GROVE_TRANSCRIBE_PLAYLIST_MINUTES || 120),
+  },
+
   embeddings: {
     // 'local'  -> deterministic TF-IDF vector store, no network calls
     // 'api'    -> OpenAI-compatible /embeddings endpoint on the Featherless base URL

@@ -44,6 +44,8 @@ flowchart TB
 
 **Ingest.** Files are parsed by format — PDFs for their text layer, images through OCR, Office and EPUB files through a ZIP reader written on Node's built-in `zlib` (no dependency). Links are routed to site-specific handlers: YouTube transcripts via the InnerTube player endpoint, Wikipedia via its extract API, plus arXiv, GitHub, Stack Overflow, Hacker News, RSS, Google Docs and generic articles.
 
+**Speech-to-text.** Audio and video uploads are transcribed with Whisper, and a YouTube video with **no captions** falls back to transcribing its audio: Grove pulls the lowest-bitrate audio track in ranged chunks (a plain GET gets reset) and sends it to the provider's `/audio/transcriptions` endpoint. Timestamps are preserved, so citations still point at a moment in the recording. Roughly 1 second of processing per 3.5 minutes of audio. Captions are always preferred when they exist — transcription only runs when there's nothing to read.
+
 **Index.** Chunks are cut sentence-aware at ~900 chars with overlap, and each keeps the exact character span it came from. Retrieval is hybrid TF-IDF cosine + BM25 with per-source diversification, running locally — no embedding API required. Set `GROVE_EMBED_PROVIDER=api` to use a real embedding model instead.
 
 **Tree.** One topic, 5–7 subtopics, and each subtopic can be expanded once into 4–6 of its own. **Two levels, hard-capped**, so the tree stays finishable instead of exploding.
@@ -125,6 +127,7 @@ server/
   sources.js        25 source types — file parsers + site handlers
   zip.js            dependency-free ZIP reader (docx/pptx/xlsx/epub)
   safe-fetch.js     SSRF guard + response size caps
+  transcribe.js     Whisper speech-to-text for audio, video, captionless YouTube
   chunk.js          sentence-aware chunking with exact source spans
   embed.js          TF-IDF + BM25 vector store
   store.js          session persistence, per-session write lock
@@ -153,6 +156,7 @@ The end-to-end suite runs the whole pipeline against a mock OpenAI-compatible se
 ## Known limits
 
 - **Reddit** returns 403 to unauthenticated requests, so that handler fails with a clear message telling you to paste the thread instead.
+- **Transcription is capped** at 90 minutes and 24MB of audio per item, and needs a provider that serves `/audio/transcriptions`. Private and members-only videos still can't be read — there's no audio to fetch.
 - **arXiv** gives the abstract, not the full paper — paste the PDF link for the whole thing.
 - **Expanded sub-subtopics don't survive a rebuild.** A rebuilt tree only has top-level subtopics, so only those carry their progress across.
 - Sessions are unauthenticated: anyone with the session id can read that session.

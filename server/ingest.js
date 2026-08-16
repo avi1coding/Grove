@@ -4,6 +4,7 @@ import { config } from './config.js';
 import { chat } from './featherless.js';
 import { parserForFile, handlerForUrl, htmlToText, parseFeedXml, looksLikeFeed } from './sources.js';
 import { assertPublicUrl } from './safe-fetch.js';
+import { transcribeAudio, transcriptionEnabled, MAX_AUDIO_BYTES } from './transcribe.js';
 
 const require = createRequire(import.meta.url);
 
@@ -192,6 +193,73 @@ async function fetchPlayer(videoId) {
   return { tracks: [], title: `YouTube ${videoId}`, ua: UA, status: lastStatus };
 }
 
+/**
+ * Download a video's smallest audio track. YouTube resets plain full-file GETs,
+ * so this walks the file in ranged chunks like a player would.
+ */
+async function fetchAudio(videoId, { maxBytes = MAX_AUDIO_BYTES } = {}) {
+  for (const client of YT_CLIENTS) {
+    let data;
+    try {
+      const res = await fetchWithTimeout(`https://www.youtube.com/youtubei/v1/player?key=${INNERTUBE_KEY}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'User-Agent': client.ua },
+        body: JSON.stringify({ context: { client: client.ctx }, videoId, contentCheckOk: true, racyCheckOk: true }),
+      }, 25_000);
+      data = await res.json();
+    } catch {
+      continue;
+    }
+
+    const seconds = Number(data?.videoDetails?.lengthSeconds || 0);
+    if (seconds > config.transcribe.maxMinutes * 60) {
+      throw Object.assign(
+        new Error(`That video is ${Math.round(seconds / 60)} minutes — over the ${config.transcribe.maxMinutes} minute transcription limit.`),
+        { reason: 'TOO_LONG' },
+      );
+    }
+
+    // Lowest-bitrate audio-only track: ~50kbps is plenty for speech and keeps
+    // an hour of audio comfortably inside the upload limit.
+    const audio = (data?.streamingData?.adaptiveFormats || [])
+      .filter((f) => String(f.mimeType || '').startsWith('audio/') && f.url)
+      .sort((a, b) => (a.bitrate || 0) - (b.bitrate || 0))[0];
+    if (!audio) continue;
+
+    const total = Number(audio.contentLength || 0);
+    if (total && total > maxBytes) {
+      throw Object.assign(
+        new Error(`That video's audio is ${(total / 1e6).toFixed(0)}MB, over the transcription limit.`),
+        { reason: 'TOO_BIG' },
+      );
+    }
+
+    const CHUNK = 1 << 20;
+    const parts = [];
+    let got = 0;
+    for (let start = 0; !total || start < total; start += CHUNK) {
+      const end = total ? Math.min(start + CHUNK - 1, total - 1) : start + CHUNK - 1;
+      const res = await fetchWithTimeout(audio.url, {
+        headers: { 'User-Agent': client.ua, Range: `bytes=${start}-${end}` },
+      }, 30_000);
+      if (res.status !== 206 && res.status !== 200) break;
+      const part = Buffer.from(await res.arrayBuffer());
+      if (!part.length) break;
+      parts.push(part);
+      got += part.length;
+      if (got > maxBytes) throw Object.assign(new Error('That audio is too large to transcribe.'), { reason: 'TOO_BIG' });
+      if (!total && part.length < CHUNK) break;
+    }
+
+    if (got) {
+      const mime = String(audio.mimeType || 'audio/mp4').split(';')[0];
+      const ext = mime.includes('webm') ? 'webm' : 'm4a';
+      return { buf: Buffer.concat(parts), mime, name: `${videoId}.${ext}`, seconds };
+    }
+  }
+  return null;
+}
+
 /** Captions come back as json3 or as timedtext XML depending on the client. */
 function parseCaptions(raw) {
   try {
@@ -227,6 +295,20 @@ export async function extractYouTube(url) {
   if (!id) throw new Error(`Not a YouTube link: ${url}`);
 
   const { tracks, title, ua, status } = await fetchPlayer(id);
+
+  // No captions? Transcribe the audio instead of giving up.
+  if (!tracks.length && transcriptionEnabled() && status !== 'LOGIN_REQUIRED') {
+    const audio = await fetchAudio(id);
+    if (audio) {
+      const r = await transcribeAudio(audio.buf, audio.name, audio.mime);
+      return {
+        text: r.text,
+        title,
+        meta: { ...r.meta, videoId: id, source: 'speech-to-text' },
+      };
+    }
+  }
+
   if (!tracks.length) {
     const why = {
       LOGIN_REQUIRED: 'it is private, members-only, or age-restricted',
@@ -318,7 +400,9 @@ export async function extractPlaylist(url, limit = 12) {
 
   if (!out.length) {
     const label = {
-      NO_CAPTIONS: 'have captions turned off',
+      NO_CAPTIONS: 'have no captions and no transcribable audio',
+      TOO_LONG: 'are longer than the transcription limit',
+      TOO_BIG: 'have audio too large to transcribe',
       LOGIN_REQUIRED: 'are private, members-only, or age-restricted',
       UNPLAYABLE: 'are region-locked or removed',
       FETCH_FAILED: 'could not be fetched',
@@ -365,6 +449,16 @@ export async function ingestFile(file) {
     const r = await extractImage(file.path, name, mime);
     return { kind: 'image', name, text: r.text, meta: r.meta };
   }
+  // Audio and video files go straight to speech-to-text.
+  if (/\.(mp3|m4a|aac|wav|ogg|oga|opus|flac|webm|mp4|mov|m4v|mkv)$/i.test(name) || /^(audio|video)\//.test(mime)) {
+    if (!transcriptionEnabled()) {
+      throw new Error(`"${name}" needs transcription, which is turned off (set GROVE_TRANSCRIBE=1).`);
+    }
+    const buf = await fs.readFile(file.path);
+    const r = await transcribeAudio(buf, name, mime || 'audio/mpeg');
+    return { kind: 'audio', name, text: r.text, meta: r.meta };
+  }
+
   const parser = parserForFile(name);
   if (parser) {
     const buf = await fs.readFile(file.path);
