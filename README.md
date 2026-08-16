@@ -1,10 +1,10 @@
 # Grove
 
-Grove turns your own study material into a skill tree you can work through.
+Grove turns your own study material into a map you can work through.
 
-You add material — PDFs, slides, notes, YouTube links, and more. Grove reads all of it, finds one main topic with five to seven subtopics, and shows them as a map. Each subtopic has a quiz written from your own sources, and every question shows the exact sentence it came from.
+You add your material — PDFs, slides, notes, YouTube links, and more. Grove reads all of it and builds a map: one main topic in the middle, with five to seven subtopics around it. Any subtopic can be opened into four to six smaller ones, and it stops there, so the map always stays small enough to actually finish.
 
-The point is that Grove cannot make things up. Before you see a question, it has to quote a real sentence from your material, and a second AI model has to confirm the answer follows from that sentence. Questions that fail are deleted and rewritten. If none survive, Grove tells you instead of showing you a quiz it cannot back up.
+Each subtopic is something you complete. You take a short quiz on it, and getting five out of five fills it in. The map shows you where you are at a glance: what is done, what is left, and which parts your material barely covers. When every subtopic is filled in, a final quiz opens on the whole topic.
 
 ## Running it
 
@@ -16,25 +16,30 @@ npm start                # http://localhost:3000
 
 Any OpenAI-compatible provider works. `.env.example` has ready-made settings for Groq, Featherless, OpenRouter, and local models through Ollama.
 
-## How it works
+## The map
 
 ```mermaid
-flowchart LR
-    A[Your material] --> B[Split into chunks<br/>and index]
-    B --> C[Find topic<br/>and subtopics]
-    C --> D[Write quiz from<br/>matching chunks]
-    D --> E{Is the quote real?<br/>Does the answer follow?}
-    E -- no --> D
-    E -- yes --> F[You see the question<br/>with its source]
+flowchart TB
+    A[Your material] --> B[One main topic]
+    B --> C[5-7 subtopics]
+    C --> D[Open any one into<br/>4-6 smaller subtopics]
+    D --> E[Complete each with a quiz]
+    E --> F[Final quiz on the whole topic]
 ```
 
-Grove reads your files and splits them into small chunks, keeping track of where each one came from. It searches those chunks to find the main topic and its subtopics. For each quiz, it pulls the chunks that match that subtopic and writes questions from them. Then every question is checked twice: once by code, to confirm the quote really appears in the source, and once by a second AI model that sees only that source and has to agree the answer is correct.
+Most study tools give you a long list of cards or questions with no shape, so you never know how much is left. Grove gives the material a structure taken from your own sources, and a clear finish line.
 
-A large model writes the tree and the quizzes. A smaller, faster one does the checking, grading, and hints.
+The two-level limit is deliberate. Left alone, a topic can be broken down forever, and you end up with hundreds of items and no sense of progress. Two levels keeps a large course to a map you can see in one screen.
 
-## Using it
+Subtopics your material barely covers are marked, and Grove tells you what to add. That way the map reflects what you can actually learn from what you have, instead of quizzing you on gaps.
 
-Getting five out of five completes a subtopic. If you miss one there is no waiting timer — you read the sentences you got wrong, then retry with new questions focused on those. Grove also marks subtopics your material barely covers and tells you what to add. When every subtopic is done, a final quiz opens covering the whole tree. Completed subtopics come back later for review, and you can keep several subjects in separate spaces.
+You can keep several subjects in separate spaces, and completed subtopics come back later for review so they stay learned.
+
+## The quizzes behind it
+
+Each quiz is written from the parts of your material that match that subtopic, and every question shows the exact sentence it came from. Before you see a question, the quote has to really appear in your source, and a second AI model has to confirm the answer follows from it. Questions that fail are rewritten, and if none survive, Grove says so rather than showing you something it cannot back up.
+
+If you miss a question there is no waiting timer. You read the sentences you got wrong, then retry with new questions focused on those.
 
 ## What it accepts
 
